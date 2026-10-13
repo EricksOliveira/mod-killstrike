@@ -19,6 +19,7 @@
 #include "WorldSessionMgr.h"
 #include <algorithm>
 #include <array>
+#include <vector>
 
 static constexpr char const* KILLSTRIKE_MODULE = "mod-killstrike";
 static constexpr char const* KILLSTRIKE_DATA_KEY = "mod-killstrike.Streak";
@@ -80,6 +81,19 @@ struct KillStrikeConfig
     uint32 StreakEndMinStreak = 10;
     uint32 AuraSpellId = SPELL_KILLSTRIKE_BLOOD_ORB;
     uint32 AuraMinStreak = 30;
+
+    // Values AuraSpellId had before a reload changed it. A reload cannot reach
+    // a player on a loading screen, so these are removed from each player the
+    // next time that player's aura is updated.
+    std::vector<uint32> RetiredAuraSpellIds;
+
+    void RetireAuraSpell(uint32 oldSpellId)
+    {
+        std::erase(RetiredAuraSpellIds, AuraSpellId);
+
+        if (oldSpellId && oldSpellId != AuraSpellId)
+            RetiredAuraSpellIds.push_back(oldSpellId);
+    }
 
     void Load()
     {
@@ -162,6 +176,9 @@ static void AnnounceToServer(KillStrikeString id, Args&&... args)
 // Shows the aura while the streak is high enough and removes it otherwise
 static void UpdateStreakAura(Player* player, uint32 streak)
 {
+    for (uint32 retiredSpellId : killStrikeConfig.RetiredAuraSpellIds)
+        player->RemoveAurasDueToSpell(retiredSpellId);
+
     uint32 const spellId = killStrikeConfig.AuraSpellId;
     if (!spellId)
         return;
@@ -212,9 +229,24 @@ static bool IsCreditedKill(Player* killer, Player* killed,
     return true;
 }
 
+// Friendly fire is not a PvP kill. A mind-controlled victim is back on its own
+// side by the time its death is reported, so the charm itself cannot be
+// checked: allies killing it must not count.
+static bool AreEnemies(Player* killer, Player* killed)
+{
+    if (killer->IsInSameRaidWith(killed))
+        return false;
+
+    // The battleground or arena team while inside one, the faction otherwise
+    if (killer->GetBgTeamId() != killed->GetBgTeamId())
+        return true;
+
+    return killer->IsFFAPvP() && killed->IsFFAPvP();
+}
+
 static void HandlePvPKill(Player* killer, Player* killed)
 {
-    if (!killStrikeConfig.Enabled || killer == killed)
+    if (!killStrikeConfig.Enabled || !AreEnemies(killer, killed))
         return;
 
     Map const* map = killed->GetMap();
@@ -300,7 +332,6 @@ public:
     KillStrikePlayerScript() : PlayerScript("KillStrikePlayerScript", {
         PLAYERHOOK_ON_PVP_KILL,
         PLAYERHOOK_ON_PLAYER_KILLED_BY_CREATURE,
-        PLAYERHOOK_ON_LOGIN,
         PLAYERHOOK_ON_BEFORE_LOGOUT,
         PLAYERHOOK_ON_PLAYER_RESURRECT,
         PLAYERHOOK_ON_MAP_CHANGED
@@ -318,16 +349,12 @@ public:
             HandlePvPKill(credited, killed);
     }
 
-    // The streak does not survive a logout, so its aura must not be saved:
-    // the logout pass removes it before the save. The login pass is only a
-    // safety net for an aura that still reached the characters DB.
-    void OnPlayerLogin(Player* player) override
-    {
-        UpdateStreakAura(player, GetStreak(player));
-    }
-
+    // The streak does not survive a logout, so its aura must not be saved.
+    // The streak is dropped too: a logout inside a battleground still changes
+    // map and may resurrect, and those hooks would put the aura back.
     void OnPlayerBeforeLogout(Player* player) override
     {
+        player->CustomData.Erase(KILLSTRIKE_DATA_KEY);
         UpdateStreakAura(player, 0);
     }
 
@@ -338,7 +365,9 @@ public:
         UpdateStreakAura(player, GetStreak(player));
     }
 
-    // Entering an arena strips the aura: this puts it back on the way out
+    // Entering an arena strips the aura: this puts it back on the way out.
+    // A login also comes through here, with the saved auras loaded and no
+    // streak yet, which removes an aura that still reached the characters DB.
     void OnPlayerMapChanged(Player* player) override
     {
         UpdateStreakAura(player, GetStreak(player));
@@ -361,13 +390,11 @@ public:
         if (!reload)
             return;
 
-        // The aura options may have changed: drop the old aura, which nothing
-        // would remove any more, and apply the new rules to everyone online
-        sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
-        {
-            if (oldSpellId && oldSpellId != killStrikeConfig.AuraSpellId)
-                player->RemoveAurasDueToSpell(oldSpellId);
+        killStrikeConfig.RetireAuraSpell(oldSpellId);
 
+        // The aura options may have changed: apply them to everyone online
+        sWorldSessionMgr->DoForAllOnlinePlayers([](Player* player)
+        {
             UpdateStreakAura(player, GetStreak(player));
         });
     }

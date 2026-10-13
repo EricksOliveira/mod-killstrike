@@ -14,6 +14,10 @@ streak.
 - From 30 kills on, the player carries a visible aura (by default the blood
   orb of the Blood Prince Council) until the streak ends.
 - Killing the player who killed you last shows a "revenge" message to both.
+- Only kills between enemies count: players of different factions (or of
+  different teams inside a battleground or arena), and players of the same
+  faction when both are in a free-for-all PvP area. Kills between members of
+  the same group or raid never count.
 - Killing blows from pets, guardians and totems count for their owner. A kill
   by a mind-controlled player counts for the player controlling it, and for
   nobody when a creature is in control.
