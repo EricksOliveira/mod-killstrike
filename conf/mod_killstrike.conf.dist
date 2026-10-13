@@ -1,0 +1,123 @@
+#
+# Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
+#
+
+[worldserver]
+
+########################################
+# KILL STRIKE CONFIGURATION
+########################################
+#
+#    KillStrike.Enable
+#        Description: Enables the PvP kill streak system.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.Enable = 1
+
+#
+#    KillStrike.Battlegrounds
+#        Description: Counts kills made inside battlegrounds.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.Battlegrounds = 1
+
+#
+#    KillStrike.Arenas
+#        Description: Counts kills made inside arenas.
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+
+KillStrike.Arenas = 0
+
+#
+#    KillStrike.AnnounceMilestones
+#        Description: Announces to the whole server when a player reaches a
+#                     streak of 3, 5, 10, 20, 30 or 50 kills.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.AnnounceMilestones = 1
+
+#
+#    KillStrike.AnnounceStreakEnd
+#        Description: Announces to the whole server when a player with a
+#                     streak of at least KillStrike.StreakEnd.MinStreak kills
+#                     is killed by another player.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.AnnounceStreakEnd = 1
+
+#
+#    KillStrike.StreakEnd.MinStreak
+#        Description: Smallest streak that is announced by
+#                     KillStrike.AnnounceStreakEnd when its owner is killed.
+#        Default:     10
+#
+
+KillStrike.StreakEnd.MinStreak = 10
+
+########################################
+# ANTI-FARM
+########################################
+#
+#    A kill that fails one of these checks does not raise the killer's streak.
+#    Killing the same player twice in a row never counts.
+#
+#    KillStrike.CheckSameIp
+#        Description: Ignores kills when killer and victim share the same IP
+#                     address.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.CheckSameIp = 1
+
+#
+#    KillStrike.CheckGrayLevel
+#        Description: Ignores kills when the victim's level is gray to the
+#                     killer (too low to give honor).
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.CheckGrayLevel = 1
+
+########################################
+# STREAK AURA
+########################################
+#
+#    KillStrike.Aura.SpellId
+#        Description: Aura shown on a player whose streak reached
+#                     KillStrike.Aura.MinStreak, so everyone can see who to
+#                     hunt. It is removed when the streak ends and on logout.
+#                     Use a visual-only spell that players cannot get any
+#                     other way. Some options:
+#                         70934 - Blood orb above the player, as on the
+#                                 Blood Prince Council in Icecrown Citadel.
+#                         38841 - Flames around the body.
+#                         40790 - Hunter's Mark arrow above the head.
+#                         20368 - Red skull above the head.
+#                     70934 and 38841 have no buff icon, so the player cannot
+#                     click them off. 40790 and 20368 show an icon that can be
+#                     clicked off; the aura then comes back on the next kill.
+#        Default:     70934 - (Blood orb)
+#                     0     - (No aura)
+#
+
+KillStrike.Aura.SpellId = 70934
+
+#
+#    KillStrike.Aura.MinStreak
+#        Description: Streak needed to get the aura.
+#        Default:     30
+#
+
+KillStrike.Aura.MinStreak = 30

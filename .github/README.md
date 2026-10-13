@@ -1,25 +1,56 @@
-# SKELETON - Module template
+# mod-killstrike
 
-[English](README.md) | [Español](README_ES.md)
+PvP kill streak system for AzerothCore (3.3.5a).
 
+Every player kill raises the killer's streak. At 3, 5, 10, 20, 30 and 50 kills
+the whole server is told about it. Being killed by another player ends the
+streak.
 
-## How to create your own module
+## Rules
 
-1. Use the script `create_module.sh` located in [`modules/`](https://github.com/azerothcore/azerothcore-wotlk/tree/master/modules) to start quickly with all the files you need and your git repo configured correctly (heavily recommended).
-1. You can then use these scripts to start your project: https://github.com/azerothcore/azerothcore-boilerplates
-1. Do not hesitate to compare with some of our newer/bigger/famous modules.
-1. Edit the `README.md` and other files (`include.sh` etc...) to fit your module. Note: the README is automatically created from `README_example.md` when you use the script `create_module.sh`.
-1. Publish your module to our [catalogue](https://www.azerothcore.org/catalogue.html).
+- The 3, 5, 10, 20, 30 and 50 kill milestones are announced to the server. The
+  streak keeps counting after 50, with no more milestones.
+- Killing a player with a streak of 10 or more is announced to the server.
+- From 30 kills on, the player carries a visible aura (by default the blood
+  orb of the Blood Prince Council) until the streak ends.
+- Killing the player who killed you last shows a "revenge" message to both.
+- Killing blows from pets, guardians and totems count for their owner.
+- The streak is only kept in memory: it is lost on logout and on a server
+  restart. Only a death to another player ends it, a death to a creature does
+  not.
 
+A kill does not raise the killer's streak when:
 
-## How to test your module?
+- the victim is the same player as the killer's previous kill;
+- killer and victim share the same IP address (`KillStrike.CheckSameIp`);
+- the victim's level is gray to the killer (`KillStrike.CheckGrayLevel`).
 
-Disable PCH (precompiled headers) and try to compile. To disable PCH, set `-DNOPCH=1` with Cmake (more info [here](http://www.azerothcore.org/wiki/CMake-options)).
+The victim's own streak still ends in these cases.
 
-If you forgot some headers, it is time to add them!
+## Installation
 
-## Licensing
+1. Place the module in the `modules/` folder of your AzerothCore source.
+2. Re-run CMake and build.
+3. Copy `mod_killstrike.conf.dist` to `mod_killstrike.conf` in your config
+   folder and edit it. The announcements, the aura and each check can be
+   changed or turned off there.
+4. The SQL in `data/sql/db-world/` is applied by the database updater on the
+   next worldserver start.
 
-The default license of the skeleton-module template is the MIT but you can use a different license for your own modules.
+## Messages
 
-So modules can also be kept private. However, if you need to add new hooks to the core, as well as improving existing ones, you have to share your improvements because the main core is released under the AGPL license. Please [provide a PR](https://www.azerothcore.org/wiki/How-to-create-a-PR) if that is the case.
+All texts are in the world database table `module_string`, under the module
+name `mod-killstrike`. Edit a row to change a text, or empty it to turn that
+message off, then run `.reload module_string`. Translations go in
+`module_string_locale`.
+
+| id   | Message                                             |
+|------|-----------------------------------------------------|
+| 0    | Killer: got revenge                                 |
+| 1    | Victim: the enemy got revenge                       |
+| 2    | Server: a streak was ended (killer, streak, victim) |
+| 3    | Victim: own streak ended                            |
+| 4    | Killer: normal kill                                 |
+| 5    | Killer: reached a milestone                         |
+| 6-10 | Server: milestone 5, 10, 20, 30, 50 (killer, victim, streak) |
+| 11   | Server: milestone 3 (killer, victim, streak)        |
