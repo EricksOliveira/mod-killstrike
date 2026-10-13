@@ -1,5 +1,6 @@
 #
-# Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
+# Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
+# Released under the MIT license, see the LICENSE file.
 #
 
 [worldserver]
@@ -98,10 +99,12 @@ KillStrike.CheckGrayLevel = 1
 #        Description: Aura shown on a player whose streak reached
 #                     KillStrike.Aura.MinStreak, so everyone can see who to
 #                     hunt. It is removed when the streak ends and on logout.
-#                     Use a visual-only spell that players cannot get any
-#                     other way. Some options:
+#                     Use a spell with no gameplay effect that players
+#                     cannot get any other way. Some options:
 #                         70934 - Blood orb above the player, as on the
 #                                 Blood Prince Council in Icecrown Citadel.
+#                                 While it is up, the server casts a cosmetic
+#                                 spell for that player twice a second.
 #                         38841 - Flames around the body.
 #                         40790 - Hunter's Mark arrow above the head.
 #                         20368 - Red skull above the head.

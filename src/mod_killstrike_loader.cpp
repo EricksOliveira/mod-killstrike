@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
+ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
+ * Released under the MIT license, see the LICENSE file.
  */
 
 // From SC
 void AddKillStrikeScripts();
 
 // Add all
-// cf. the naming convention https://github.com/azerothcore/azerothcore-wotlk/blob/master/doc/changelog/master.md#how-to-upgrade-4
-// additionally replace all '-' in the module folder name with '_' here
+// The core calls Add<module folder name>Scripts, with every '-' of the
+// folder name replaced by '_'
 void Addmod_killstrikeScripts()
 {
     AddKillStrikeScripts();

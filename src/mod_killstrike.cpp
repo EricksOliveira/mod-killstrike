@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
+ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>
+ * Released under the MIT license, see the LICENSE file.
  */
 
 #include "Chat.h"
@@ -41,8 +42,9 @@ enum KillStrikeString : uint32
 
 enum KillStrikeSpell
 {
-    // Visual only, no buff icon: the blood orb the Blood Prince Council
-    // carries out of combat (Invocation of Blood)
+    // Invocation of Blood, the blood orb the Blood Prince Council carries out
+    // of combat. No buff icon and no gameplay effect: its only effect casts
+    // the cosmetic spell 71582 near its bearer every 500 ms.
     SPELL_KILLSTRIKE_BLOOD_ORB = 70934,
 };
 
@@ -110,6 +112,7 @@ struct KillStrikeData : public DataMap::Base
 {
     uint32 Streak = 0;
     ObjectGuid LastVictim;
+    ObjectGuid LastKiller;
 };
 
 // Text of a module string in the player's locale. Empty when the row is
@@ -118,7 +121,10 @@ template<typename... Args>
 static std::string GetText(Player* player, KillStrikeString id, Args&&... args)
 {
     // The locale lookup below returns an invalid pointer for a missing row
-    if (!sObjectMgr->GetModuleString(KILLSTRIKE_MODULE, id))
+    // and for a row whose text is empty
+    ModuleString const* row =
+        sObjectMgr->GetModuleString(KILLSTRIKE_MODULE, id);
+    if (!row || row->Content.empty())
         return "";
 
     return Acore::StringFormat(
@@ -224,31 +230,31 @@ static void HandlePvPKill(Player* killer, Player* killed)
         killed->CustomData.GetDefault<KillStrikeData>(KILLSTRIKE_DATA_KEY);
 
     bool const credited = IsCreditedKill(killer, killed, killerData);
-    bool const revenge = victimData->LastVictim == killer->GetGUID();
+    bool const revenge = killerData->LastKiller == killed->GetGUID();
     uint32 const endedStreak = victimData->Streak;
 
     // A death to another player always ends the streak, also when the kill
     // is not credited to the killer
     victimData->Streak = 0;
     victimData->LastVictim.Clear();
+    victimData->LastKiller = killer->GetGUID();
     UpdateStreakAura(killed, 0);
 
-    bool const streakEnded =
-        endedStreak && endedStreak >= killStrikeConfig.StreakEndMinStreak;
-    if (streakEnded)
-    {
-        if (killStrikeConfig.AnnounceStreakEnd)
-            AnnounceToServer(KILLSTRIKE_STRING_STREAK_ENDED_BY,
-                killer->GetName(), endedStreak, killed->GetName());
+    if (killStrikeConfig.AnnounceStreakEnd && endedStreak
+        && endedStreak >= killStrikeConfig.StreakEndMinStreak)
+        AnnounceToServer(KILLSTRIKE_STRING_STREAK_ENDED_BY, killer->GetName(),
+            endedStreak, killed->GetName());
 
+    // The victim is told about any streak that reached the first milestone
+    if (endedStreak >= KillStrikeMilestones.front().Kills)
         SendScreenText(killed, KILLSTRIKE_STRING_STREAK_ENDED);
-    }
 
     if (!credited)
         return;
 
     if (revenge)
     {
+        killerData->LastKiller.Clear();
         SendChatText(killer, KILLSTRIKE_STRING_REVENGE_EARNED);
         SendChatText(killed, KILLSTRIKE_STRING_REVENGED);
     }
@@ -276,6 +282,18 @@ static void HandlePvPKill(Player* killer, Player* killed)
     SendScreenText(killer, KILLSTRIKE_STRING_ON_STREAK);
 }
 
+// The player a killing blow counts for. A pet, guardian or totem kills for its
+// owner and a mind-controlled unit for the player controlling it. Nobody is
+// credited while a creature is the one in control, as with a boss mind control.
+static Player* GetCreditedKiller(Unit* killer)
+{
+    ObjectGuid const charmerGuid = killer->GetCharmerGUID();
+    if (charmerGuid && !charmerGuid.IsPlayer())
+        return nullptr;
+
+    return killer->GetCharmerOrOwnerPlayerOrPlayerItself();
+}
+
 class KillStrikePlayerScript : public PlayerScript
 {
 public:
@@ -284,23 +302,25 @@ public:
         PLAYERHOOK_ON_PLAYER_KILLED_BY_CREATURE,
         PLAYERHOOK_ON_LOGIN,
         PLAYERHOOK_ON_BEFORE_LOGOUT,
-        PLAYERHOOK_ON_PLAYER_RESURRECT
+        PLAYERHOOK_ON_PLAYER_RESURRECT,
+        PLAYERHOOK_ON_MAP_CHANGED
     }) { }
 
     void OnPlayerPVPKill(Player* killer, Player* killed) override
     {
-        HandlePvPKill(killer, killed);
+        if (Player* credited = GetCreditedKiller(killer))
+            HandlePvPKill(credited, killed);
     }
 
-    // A killing blow from a pet, guardian or totem counts for its owner
     void OnPlayerKilledByCreature(Creature* killer, Player* killed) override
     {
-        if (Player* owner = killer->GetCharmerOrOwnerPlayerOrPlayerItself())
-            HandlePvPKill(owner, killed);
+        if (Player* credited = GetCreditedKiller(killer))
+            HandlePvPKill(credited, killed);
     }
 
-    // The streak does not survive a logout, so its aura must not be saved.
-    // The login pass cleans up an aura that was saved before a crash.
+    // The streak does not survive a logout, so its aura must not be saved:
+    // the logout pass removes it before the save. The login pass is only a
+    // safety net for an aura that still reached the characters DB.
     void OnPlayerLogin(Player* player) override
     {
         UpdateStreakAura(player, GetStreak(player));
@@ -317,6 +337,12 @@ public:
     {
         UpdateStreakAura(player, GetStreak(player));
     }
+
+    // Entering an arena strips the aura: this puts it back on the way out
+    void OnPlayerMapChanged(Player* player) override
+    {
+        UpdateStreakAura(player, GetStreak(player));
+    }
 };
 
 class KillStrikeWorldScript : public WorldScript
@@ -326,9 +352,24 @@ public:
         WORLDHOOK_ON_AFTER_CONFIG_LOAD
     }) { }
 
-    void OnAfterConfigLoad(bool /*reload*/) override
+    void OnAfterConfigLoad(bool reload) override
     {
+        uint32 const oldSpellId = killStrikeConfig.AuraSpellId;
+
         killStrikeConfig.Load();
+
+        if (!reload)
+            return;
+
+        // The aura options may have changed: drop the old aura, which nothing
+        // would remove any more, and apply the new rules to everyone online
+        sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
+        {
+            if (oldSpellId && oldSpellId != killStrikeConfig.AuraSpellId)
+                player->RemoveAurasDueToSpell(oldSpellId);
+
+            UpdateStreakAura(player, GetStreak(player));
+        });
     }
 };
 

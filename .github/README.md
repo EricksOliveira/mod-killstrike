@@ -14,7 +14,9 @@ streak.
 - From 30 kills on, the player carries a visible aura (by default the blood
   orb of the Blood Prince Council) until the streak ends.
 - Killing the player who killed you last shows a "revenge" message to both.
-- Killing blows from pets, guardians and totems count for their owner.
+- Killing blows from pets, guardians and totems count for their owner. A kill
+  by a mind-controlled player counts for the player controlling it, and for
+  nobody when a creature is in control.
 - The streak is only kept in memory: it is lost on logout and on a server
   restart. Only a death to another player ends it, a death to a creature does
   not.
@@ -49,7 +51,7 @@ message off, then run `.reload module_string`. Translations go in
 | 0    | Killer: got revenge                                 |
 | 1    | Victim: the enemy got revenge                       |
 | 2    | Server: a streak was ended (killer, streak, victim) |
-| 3    | Victim: own streak ended                            |
+| 3    | Victim: own streak of 3 or more ended               |
 | 4    | Killer: normal kill                                 |
 | 5    | Killer: reached a milestone                         |
 | 6-10 | Server: milestone 5, 10, 20, 30, 50 (killer, victim, streak) |
