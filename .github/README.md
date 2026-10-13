@@ -2,9 +2,9 @@
 
 PvP kill streak system for AzerothCore (3.3.5a).
 
-Every player kill raises the killer's streak. At 3, 5, 10, 20, 30 and 50 kills
-the whole server is told about it. Being killed by another player ends the
-streak.
+Every kill of an enemy player raises the killer's streak. At 3, 5, 10, 20, 30
+and 50 kills the whole server is told about it. Being killed by an enemy player
+ends the streak.
 
 ## Rules
 
@@ -16,16 +16,18 @@ streak.
 - Killing the player who killed you last shows a "revenge" message to both.
 - Only kills between enemies count: players of different factions (or of
   different teams inside a battleground or arena), and players of the same
-  faction when both are in a free-for-all PvP area. Kills between members of
-  the same group or raid never count.
+  faction when both are flagged for free-for-all PvP, as in a free-for-all
+  area or on a free-for-all realm. Members of the same group or raid are never
+  enemies. Any other kill is ignored for both players: the killer's streak does
+  not rise and the victim keeps its own streak and aura.
 - Killing blows from pets, guardians and totems count for their owner. A kill
   by a mind-controlled player counts for the player controlling it, and for
   nobody when a creature is in control.
 - The streak is only kept in memory: it is lost on logout and on a server
-  restart. Only a death to another player ends it, a death to a creature does
+  restart. Only a death to an enemy player ends it, a death to a creature does
   not.
 
-A kill does not raise the killer's streak when:
+A kill between enemies does not raise the killer's streak when:
 
 - the victim is the same player as the killer's previous kill;
 - killer and victim share the same IP address (`KillStrike.CheckSameIp`);
