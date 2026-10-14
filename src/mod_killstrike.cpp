@@ -271,7 +271,7 @@ static void MailStreakReward(Player* player, ItemTemplate const* proto,
 static void GiveStreakReward(Player* player, uint32 streak)
 {
     uint32 const itemId = killStrikeConfig.RewardItemId;
-    uint32 const count = killStrikeConfig.RewardCount;
+    uint32 count = killStrikeConfig.RewardCount;
     if (!itemId || !count)
         return;
 
@@ -282,6 +282,22 @@ static void GiveStreakReward(Player* player, uint32 streak)
             "exist, no reward was given.", itemId);
         return;
     }
+
+    // Copies over the item's unique or limit category cap are not given:
+    // the player could not take them out of the mail either
+    uint32 overCapCount = 0;
+    if (player->CanTakeMoreSimilarItems(itemId, count, nullptr,
+        &overCapCount) != EQUIP_ERR_OK)
+    {
+        LOG_WARN("module", "KillStrike.Reward.ItemId: player {} cannot carry "
+            "{} more of item {}, they were not given.",
+            player->GetGUID().ToString(), std::min(overCapCount, count),
+            itemId);
+        count -= std::min(overCapCount, count);
+    }
+
+    if (!count)
+        return;
 
     SendChatText(player, KILLSTRIKE_STRING_REWARD, streak);
 

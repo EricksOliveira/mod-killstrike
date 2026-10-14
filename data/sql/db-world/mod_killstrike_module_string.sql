@@ -1,4 +1,5 @@
--- An empty `string` turns that message off.
+-- An empty `string` turns that message off, except 14 and 15: the reward mail
+-- is always sent, an empty subject or body is just left blank.
 -- 2:     {} = killer, {} = ended streak, {} = victim
 -- 6-11:  {} = killer, {} = victim, {} = streak
 -- 12,15: {} = streak

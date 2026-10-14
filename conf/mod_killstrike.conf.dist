@@ -141,7 +141,8 @@ KillStrike.Reward.Streak = 30
 #
 #    KillStrike.Reward.ItemId
 #        Description: Item given as the reward. What does not fit in the bags
-#                     is sent to the player's mailbox.
+#                     is sent to the player's mailbox. Copies a player cannot
+#                     carry, as a second copy of a unique item, are not given.
 #        Default:     49426 - (Emblem of Frost)
 #                     0     - (No reward)
 #

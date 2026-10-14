@@ -44,8 +44,8 @@ The victim's own streak still ends in these cases.
 1. Place the module in the `modules/` folder of your AzerothCore source.
 2. Re-run CMake and build.
 3. Copy `mod_killstrike.conf.dist` to `mod_killstrike.conf` in your config
-   folder and edit it. The announcements, the aura and each check can be
-   changed or turned off there.
+   folder and edit it. The announcements, the aura, the reward and each
+   check can be changed or turned off there.
 4. The SQL in `data/sql/db-world/` is applied by the database updater on the
    next worldserver start.
 
@@ -53,8 +53,9 @@ The victim's own streak still ends in these cases.
 
 All texts are in the world database table `module_string`, under the module
 name `mod-killstrike`. Edit a row to change a text, or empty it to turn that
-message off, then run `.reload module_string`. Translations go in
-`module_string_locale`.
+message off, then run `.reload module_string`. Rows 14 and 15 cannot be turned
+off: the reward mail is always sent, with a blank subject or body when its row
+is empty. Translations go in `module_string_locale`.
 
 | id   | Message                                             |
 |------|-----------------------------------------------------|
