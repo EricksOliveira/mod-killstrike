@@ -70,7 +70,17 @@ KillStrike.StreakEnd.MinStreak = 10
 ########################################
 #
 #    A kill that fails one of these checks does not raise the killer's streak.
-#    Killing the same player twice in a row never counts.
+#
+#    KillStrike.CheckSameVictim
+#        Description: Ignores kills of the same player as the killer's previous
+#                     kill. Turn it off only to test the streak with two
+#                     characters.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+
+KillStrike.CheckSameVictim = 1
+
 #
 #    KillStrike.CheckSameIp
 #        Description: Ignores kills when killer and victim share the same IP
