@@ -7,8 +7,11 @@
 #include "Config.h"
 #include "Creature.h"
 #include "DataMap.h"
+#include "DatabaseEnv.h"
 #include "Formulas.h"
+#include "Item.h"
 #include "Log.h"
+#include "Mail.h"
 #include "Map.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -39,7 +42,14 @@ enum KillStrikeString : uint32
     KILLSTRIKE_STRING_MILESTONE_30    = 9,
     KILLSTRIKE_STRING_MILESTONE_50    = 10,
     KILLSTRIKE_STRING_MILESTONE_3     = 11,
+    KILLSTRIKE_STRING_REWARD          = 12,
+    KILLSTRIKE_STRING_REWARD_MAILED   = 13,
+    KILLSTRIKE_STRING_REWARD_SUBJECT  = 14,
+    KILLSTRIKE_STRING_REWARD_BODY     = 15,
 };
+
+// Sender of the mail that carries a reward that did not fit in the bags
+static constexpr uint32 NPC_THE_POSTMASTER = 34337;
 
 enum KillStrikeSpell
 {
@@ -82,6 +92,10 @@ struct KillStrikeConfig
     uint32 AuraSpellId = SPELL_KILLSTRIKE_BLOOD_ORB;
     uint32 AuraMinStreak = 30;
 
+    uint32 RewardStreak = 30;
+    uint32 RewardItemId = 49426;
+    uint32 RewardCount = 1;
+
     // Values AuraSpellId had before a reload changed it. A reload cannot reach
     // a player on a loading screen, so these are removed from each player the
     // next time that player's aura is updated.
@@ -116,6 +130,13 @@ struct KillStrikeConfig
             SPELL_KILLSTRIKE_BLOOD_ORB);
         AuraMinStreak =
             sConfigMgr->GetOption<uint32>("KillStrike.Aura.MinStreak", 30);
+
+        RewardStreak =
+            sConfigMgr->GetOption<uint32>("KillStrike.Reward.Streak", 30);
+        RewardItemId =
+            sConfigMgr->GetOption<uint32>("KillStrike.Reward.ItemId", 49426);
+        RewardCount =
+            sConfigMgr->GetOption<uint32>("KillStrike.Reward.Count", 1);
     }
 };
 
@@ -209,6 +230,86 @@ static uint32 GetStreak(Player* player)
     return data ? data->Streak : 0;
 }
 
+// Sends the given amount of the reward item by mail, split in stacks and in
+// as many mails as needed
+static void MailStreakReward(Player* player, ItemTemplate const* proto,
+    uint32 count, uint32 streak)
+{
+    std::string const subject =
+        GetText(player, KILLSTRIKE_STRING_REWARD_SUBJECT);
+    std::string const body =
+        GetText(player, KILLSTRIKE_STRING_REWARD_BODY, streak);
+    uint32 const maxStack = proto->GetMaxStackSize();
+
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+    while (count)
+    {
+        MailDraft draft(subject, body);
+
+        for (uint8 i = 0; i < MAX_MAIL_ITEMS && count; ++i)
+        {
+            uint32 const stack = std::min(count, maxStack);
+            count -= stack;
+
+            if (Item* item = Item::CreateItem(proto->ItemId, stack, player))
+            {
+                // Saved so the item is not lost on the next mail load
+                item->SaveToDB(trans);
+                draft.AddItem(item);
+            }
+        }
+
+        draft.SendMailTo(trans, MailReceiver(player),
+            MailSender(MAIL_CREATURE, NPC_THE_POSTMASTER));
+    }
+
+    CharacterDatabase.CommitTransaction(trans);
+}
+
+// Puts the reward in the bags and mails what does not fit
+static void GiveStreakReward(Player* player, uint32 streak)
+{
+    uint32 const itemId = killStrikeConfig.RewardItemId;
+    uint32 const count = killStrikeConfig.RewardCount;
+    if (!itemId || !count)
+        return;
+
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+    if (!proto)
+    {
+        LOG_ERROR("module", "KillStrike.Reward.ItemId: item {} does not "
+            "exist, no reward was given.", itemId);
+        return;
+    }
+
+    SendChatText(player, KILLSTRIKE_STRING_REWARD, streak);
+
+    uint32 noSpaceCount = 0;
+    ItemPosCountVec dest;
+    InventoryResult const result = player->CanStoreNewItem(NULL_BAG,
+        NULL_SLOT, dest, itemId, count, &noSpaceCount);
+
+    uint32 stored = 0;
+    if (!dest.empty())
+    {
+        uint32 const storable = result == EQUIP_ERR_OK
+            ? count : count - std::min(noSpaceCount, count);
+
+        if (Item* item = player->StoreNewItem(dest, itemId, true))
+        {
+            player->SendNewItem(item, storable, true, false);
+            stored = storable;
+        }
+    }
+
+    if (stored == count)
+        return;
+
+    MailStreakReward(player, proto, count - stored, streak);
+    SendChatText(player, KILLSTRIKE_STRING_REWARD_MAILED);
+}
+
 // Only a credited kill raises the streak. These checks stop two characters
 // from feeding each other kills.
 static bool IsCreditedKill(Player* killer, Player* killed,
@@ -294,6 +395,9 @@ static void HandlePvPKill(Player* killer, Player* killed)
     ++killerData->Streak;
     killerData->LastVictim = killed->GetGUID();
     UpdateStreakAura(killer, killerData->Streak);
+
+    if (killerData->Streak == killStrikeConfig.RewardStreak)
+        GiveStreakReward(killer, killerData->Streak);
 
     auto const milestone = std::find_if(KillStrikeMilestones.begin(),
         KillStrikeMilestones.end(), [&](KillStrikeMilestone const& entry)

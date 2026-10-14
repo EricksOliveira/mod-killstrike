@@ -124,3 +124,35 @@ KillStrike.Aura.SpellId = 70934
 #
 
 KillStrike.Aura.MinStreak = 30
+
+########################################
+# STREAK REWARD
+########################################
+#
+#    KillStrike.Reward.Streak
+#        Description: Streak at which the player gets the reward. It is given
+#                     once per streak; a new streak can earn it again.
+#        Default:     30
+#                     0  - (No reward)
+#
+
+KillStrike.Reward.Streak = 30
+
+#
+#    KillStrike.Reward.ItemId
+#        Description: Item given as the reward. What does not fit in the bags
+#                     is sent to the player's mailbox.
+#        Default:     49426 - (Emblem of Frost)
+#                     0     - (No reward)
+#
+
+KillStrike.Reward.ItemId = 49426
+
+#
+#    KillStrike.Reward.Count
+#        Description: How many of KillStrike.Reward.ItemId are given.
+#        Default:     1
+#                     0 - (No reward)
+#
+
+KillStrike.Reward.Count = 1

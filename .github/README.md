@@ -13,6 +13,10 @@ ends the streak.
 - Killing a player with a streak of 10 or more is announced to the server.
 - From 30 kills on, the player carries a visible aura (by default the blood
   orb of the Blood Prince Council) until the streak ends.
+- At 30 kills the player gets a reward, by default 1 Emblem of Frost. The
+  streak, the item and the amount are set in the config
+  (`KillStrike.Reward.*`). It is given once per streak, and what does not fit
+  in the bags is sent to the mailbox.
 - Killing the player who killed you last shows a "revenge" message to both.
 - Only kills between enemies count: players of different factions (or of
   different teams inside a battleground or arena), and players of the same
@@ -62,3 +66,7 @@ message off, then run `.reload module_string`. Translations go in
 | 5    | Killer: reached a milestone                         |
 | 6-10 | Server: milestone 5, 10, 20, 30, 50 (killer, victim, streak) |
 | 11   | Server: milestone 3 (killer, victim, streak)        |
+| 12   | Killer: earned the reward (streak)                  |
+| 13   | Killer: part of the reward was mailed               |
+| 14   | Mail subject of a mailed reward                     |
+| 15   | Mail body of a mailed reward (streak)               |
