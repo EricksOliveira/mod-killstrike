@@ -2,8 +2,7 @@
 -- 2:     {} = killer, {} = ended streak, {} = victim
 -- 6-11:  {} = killer, {} = victim, {} = streak
 -- 12,15: {} = streak
-DELETE FROM `module_string`
-WHERE `module` = 'mod-killstrike' AND `id` BETWEEN 0 AND 15;
+DELETE FROM `module_string` WHERE `module` = 'mod-killstrike' AND `id` BETWEEN 0 AND 15;
 INSERT INTO `module_string` (`module`, `id`, `string`) VALUES
 ('mod-killstrike', 0, '|cFF00FF00You got revenge!|r'),
 ('mod-killstrike', 1, '|cFFFF0000Your enemy got revenge!|r'),
