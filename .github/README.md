@@ -35,7 +35,8 @@ ends the streak.
 
 A kill between enemies does not raise the killer's streak when:
 
-- the victim is the same player as the killer's previous kill;
+- the victim is the same player as the killer's previous kill
+  (`KillStrike.CheckSameVictim`);
 - killer and victim share the same IP address (`KillStrike.CheckSameIp`);
 - the victim's level is gray to the killer (`KillStrike.CheckGrayLevel`).
 
@@ -74,3 +75,4 @@ subject or body when its row is empty. Translations go in
 | 13   | Killer: part of the reward was mailed               |
 | 14   | Mail subject of a mailed reward                     |
 | 15   | Mail body of a mailed reward (streak)               |
+| 16   | Prefix put before every chat line of this module    |

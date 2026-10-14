@@ -46,6 +46,7 @@ enum KillStrikeString : uint32
     KILLSTRIKE_STRING_REWARD_MAILED   = 13,
     KILLSTRIKE_STRING_REWARD_SUBJECT  = 14,
     KILLSTRIKE_STRING_REWARD_BODY     = 15,
+    KILLSTRIKE_STRING_CHAT_PREFIX     = 16,
 };
 
 // Sender of the mail that carries a reward that did not fit in the bags
@@ -87,6 +88,7 @@ struct KillStrikeConfig
     bool AnnounceStreakEnd = true;
     bool CheckSameIp = true;
     bool CheckGrayLevel = true;
+    bool CheckSameVictim = true;
 
     uint32 StreakEndMinStreak = 10;
     uint32 AuraSpellId = SPELL_KILLSTRIKE_BLOOD_ORB;
@@ -123,6 +125,8 @@ struct KillStrikeConfig
             sConfigMgr->GetOption<bool>("KillStrike.CheckSameIp", true);
         CheckGrayLevel =
             sConfigMgr->GetOption<bool>("KillStrike.CheckGrayLevel", true);
+        CheckSameVictim =
+            sConfigMgr->GetOption<bool>("KillStrike.CheckSameVictim", true);
 
         StreakEndMinStreak =
             sConfigMgr->GetOption<uint32>("KillStrike.StreakEnd.MinStreak", 10);
@@ -166,22 +170,29 @@ static std::string GetText(Player* player, KillStrikeString id, Args&&... args)
         *player->GetSession()->GetModuleString(KILLSTRIKE_MODULE, id), args...);
 }
 
+// Chat lines start with the prefix, so players see which system sent them
+static void SendChatLine(Player* player, std::string const& text)
+{
+    ChatHandler(player->GetSession()).SendSysMessage(
+        GetText(player, KILLSTRIKE_STRING_CHAT_PREFIX) + text);
+}
+
 template<typename... Args>
 static void SendChatText(Player* player, KillStrikeString id, Args&&... args)
 {
     std::string const text = GetText(player, id, args...);
     if (!text.empty())
-        ChatHandler(player->GetSession()).SendSysMessage(text);
+        SendChatLine(player, text);
 }
 
-// Chat line plus the same text in the middle of the screen
+// Chat line plus the same text, with no prefix, in the middle of the screen
 static void SendScreenText(Player* player, KillStrikeString id)
 {
     std::string const text = GetText(player, id);
     if (text.empty())
         return;
 
-    ChatHandler(player->GetSession()).SendSysMessage(text);
+    SendChatLine(player, text);
     player->GetSession()->SendAreaTriggerMessage(text);
 }
 
@@ -331,7 +342,8 @@ static void GiveStreakReward(Player* player, uint32 streak)
 static bool IsCreditedKill(Player* killer, Player* killed,
     KillStrikeData const* killerData)
 {
-    if (killerData->LastVictim == killed->GetGUID())
+    if (killStrikeConfig.CheckSameVictim
+        && killerData->LastVictim == killed->GetGUID())
         return false;
 
     std::string const& killerIp = killer->GetSession()->GetRemoteAddress();
