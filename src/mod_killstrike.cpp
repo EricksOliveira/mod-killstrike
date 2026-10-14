@@ -289,11 +289,11 @@ static void GiveStreakReward(Player* player, uint32 streak)
     if (player->CanTakeMoreSimilarItems(itemId, count, nullptr,
         &overCapCount) != EQUIP_ERR_OK)
     {
+        uint32 const notGiven = std::min(overCapCount, count);
         LOG_WARN("module", "KillStrike.Reward.ItemId: player {} cannot carry "
             "{} more of item {}, they were not given.",
-            player->GetGUID().ToString(), std::min(overCapCount, count),
-            itemId);
-        count -= std::min(overCapCount, count);
+            player->GetGUID().ToString(), notGiven, itemId);
+        count -= notGiven;
     }
 
     if (!count)

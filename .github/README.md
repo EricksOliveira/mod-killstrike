@@ -16,7 +16,9 @@ ends the streak.
 - At 30 kills the player gets a reward, by default 1 Emblem of Frost. The
   streak, the item and the amount are set in the config
   (`KillStrike.Reward.*`). It is given once per streak, and what does not fit
-  in the bags is sent to the mailbox.
+  in the bags is sent to the mailbox. Copies the player cannot carry, such as
+  a second copy of a unique item, are not given; copies still waiting in the
+  mailbox are not counted.
 - Killing the player who killed you last shows a "revenge" message to both.
 - Only kills between enemies count: players of different factions (or of
   different teams inside a battleground or arena), and players of the same
@@ -54,8 +56,8 @@ The victim's own streak still ends in these cases.
 All texts are in the world database table `module_string`, under the module
 name `mod-killstrike`. Edit a row to change a text, or empty it to turn that
 message off, then run `.reload module_string`. Rows 14 and 15 cannot be turned
-off: the reward mail is always sent, with a blank subject or body when its row
-is empty. Translations go in `module_string_locale`.
+off: a reward that does not fit in the bags is still mailed, with a blank
+subject or body when its row is empty. Translations go in `module_string_locale`.
 
 | id   | Message                                             |
 |------|-----------------------------------------------------|
