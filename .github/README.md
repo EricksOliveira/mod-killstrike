@@ -57,7 +57,8 @@ All texts are in the world database table `module_string`, under the module
 name `mod-killstrike`. Edit a row to change a text, or empty it to turn that
 message off, then run `.reload module_string`. Rows 14 and 15 cannot be turned
 off: a reward that does not fit in the bags is still mailed, with a blank
-subject or body when its row is empty. Translations go in `module_string_locale`.
+subject or body when its row is empty. Translations go in
+`module_string_locale`.
 
 | id   | Message                                             |
 |------|-----------------------------------------------------|
