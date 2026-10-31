@@ -199,6 +199,7 @@ struct KillStrikeData : public DataMap::Base
 
     // Time left until the bounty location is announced again
     uint32 BountyTimer = 0;
+    bool BountyPlaced = false;
 };
 
 // An item given for a streak or for a bounty, with the texts that go with it
@@ -474,6 +475,7 @@ static uint32 EndStreak(Player* killer, Player* killed)
     uint32 const endedStreak = data->Streak;
 
     data->Streak = 0;
+    data->BountyPlaced = false;
     data->LastVictim.Clear();
     data->LastKiller = killer->GetGUID();
     UpdateStreakAura(killed, 0);
@@ -490,9 +492,12 @@ static uint32 EndStreak(Player* killer, Player* killed)
     return endedStreak;
 }
 
-static void AnnounceBounty(Player* player, KillStrikeData* data,
-    KillStrikeString id)
+static void AnnounceBounty(Player* player, KillStrikeData* data)
 {
+    KillStrikeString const id = data->BountyPlaced
+        ? KILLSTRIKE_STRING_BOUNTY_REMINDER : KILLSTRIKE_STRING_BOUNTY_PLACED;
+
+    data->BountyPlaced = true;
     data->BountyTimer = killStrikeConfig.BountyAnnounceInterval;
     AnnounceLocationToServer(id, player, player->GetName(), data->Streak);
 }
@@ -537,9 +542,9 @@ static void LaunchNuke(Player* player)
         if (!AreEnemies(player, target) || !player->IsValidAttackTarget(target))
             continue;
 
-        // Killed as a suicide, so nobody gets honor for it and the PvP kill
-        // hook sees killer == victim and skips it
-        Unit::Kill(target, target, false);
+        // no killer: a self kill would still credit a charmer with honor and
+        // the victim with a killing blow achievement
+        Unit::Kill(nullptr, target, false);
         EndStreak(player, target);
         SendScreenText(target, KILLSTRIKE_STRING_NUKED, player->GetName());
         ++kills;
@@ -610,8 +615,9 @@ static void HandlePvPKill(Player* killer, Player* killed)
         SendScreenText(killer, KILLSTRIKE_STRING_ON_STREAK);
     }
 
-    if (streak == killStrikeConfig.BountyStreak)
-        AnnounceBounty(killer, killerData, KILLSTRIKE_STRING_BOUNTY_PLACED);
+    if (killStrikeConfig.BountyStreak && streak >= killStrikeConfig.BountyStreak
+        && !killerData->BountyPlaced)
+        AnnounceBounty(killer, killerData);
 
     if (killStrikeConfig.NukeEnabled && streak == killStrikeConfig.NukeStreak)
         LaunchNuke(killer);
@@ -677,12 +683,12 @@ public:
         UpdateStreakAura(player, GetStreak(player));
     }
 
-    // Repeats the bounty location while the player keeps the streak
+    // Repeats the bounty location while the player keeps the streak. Also
+    // places a bounty that a config reload brought below the current streak.
     void OnPlayerUpdate(Player* player, uint32 diff) override
     {
         uint32 const bountyStreak = killStrikeConfig.BountyStreak;
-        if (!killStrikeConfig.Enabled || !bountyStreak
-            || !killStrikeConfig.BountyAnnounceInterval)
+        if (!killStrikeConfig.Enabled || !bountyStreak)
             return;
 
         KillStrikeData* data =
@@ -690,13 +696,19 @@ public:
         if (!data || data->Streak < bountyStreak)
             return;
 
-        if (data->BountyTimer > diff)
+        if (data->BountyPlaced)
         {
-            data->BountyTimer -= diff;
-            return;
+            if (!killStrikeConfig.BountyAnnounceInterval)
+                return;
+
+            if (data->BountyTimer > diff)
+            {
+                data->BountyTimer -= diff;
+                return;
+            }
         }
 
-        AnnounceBounty(player, data, KILLSTRIKE_STRING_BOUNTY_REMINDER);
+        AnnounceBounty(player, data);
     }
 };
 
