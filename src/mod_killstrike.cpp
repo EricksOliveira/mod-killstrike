@@ -3,12 +3,16 @@
  * Released under the MIT license, see the LICENSE file.
  */
 
+#include "CellImpl.h"
 #include "Chat.h"
 #include "Config.h"
 #include "Creature.h"
+#include "DBCStores.h"
 #include "DataMap.h"
 #include "DatabaseEnv.h"
 #include "Formulas.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Item.h"
 #include "Log.h"
 #include "Mail.h"
@@ -22,6 +26,7 @@
 #include "WorldSessionMgr.h"
 #include <algorithm>
 #include <array>
+#include <list>
 #include <vector>
 
 static constexpr char const* KILLSTRIKE_MODULE = "mod-killstrike";
@@ -47,6 +52,14 @@ enum KillStrikeString : uint32
     KILLSTRIKE_STRING_REWARD_SUBJECT  = 14,
     KILLSTRIKE_STRING_REWARD_BODY     = 15,
     KILLSTRIKE_STRING_CHAT_PREFIX     = 16,
+    KILLSTRIKE_STRING_BOUNTY_PLACED   = 17,
+    KILLSTRIKE_STRING_BOUNTY_REMINDER = 18,
+    KILLSTRIKE_STRING_BOUNTY_CLAIMED  = 19,
+    KILLSTRIKE_STRING_BOUNTY_REWARD   = 20,
+    KILLSTRIKE_STRING_BOUNTY_SUBJECT  = 21,
+    KILLSTRIKE_STRING_BOUNTY_BODY     = 22,
+    KILLSTRIKE_STRING_NUKE            = 23,
+    KILLSTRIKE_STRING_NUKED           = 24,
 };
 
 // Sender of the mail that carries a reward that did not fit in the bags
@@ -58,6 +71,9 @@ enum KillStrikeSpell
     // of combat. No buff icon and no gameplay effect: its only effect casts
     // the cosmetic spell 71582 near its bearer every 500 ms.
     SPELL_KILLSTRIKE_BLOOD_ORB = 70934,
+
+    // Cosmetic - Huge Explosion. Only a visual: its dummy effect has no script.
+    SPELL_KILLSTRIKE_NUKE_VISUAL = 46225,
 };
 
 struct KillStrikeMilestone
@@ -97,6 +113,16 @@ struct KillStrikeConfig
     uint32 RewardStreak = 30;
     uint32 RewardItemId = 49426;
     uint32 RewardCount = 1;
+
+    uint32 BountyStreak = 50;
+    uint32 BountyAnnounceInterval = 120 * IN_MILLISECONDS;
+    uint32 BountyItemId = 49426;
+    uint32 BountyCount = 5;
+
+    bool NukeEnabled = false;
+    uint32 NukeStreak = 50;
+    float NukeRadius = 40.0f;
+    uint32 NukeVisualSpellId = SPELL_KILLSTRIKE_NUKE_VISUAL;
 
     // Values AuraSpellId had before a reload changed it. A reload cannot reach
     // a player on a loading screen, so these are removed from each player the
@@ -141,6 +167,24 @@ struct KillStrikeConfig
             sConfigMgr->GetOption<uint32>("KillStrike.Reward.ItemId", 49426);
         RewardCount =
             sConfigMgr->GetOption<uint32>("KillStrike.Reward.Count", 1);
+
+        BountyStreak =
+            sConfigMgr->GetOption<uint32>("KillStrike.Bounty.Streak", 50);
+        BountyAnnounceInterval = sConfigMgr->GetOption<uint32>(
+            "KillStrike.Bounty.AnnounceInterval", 120) * IN_MILLISECONDS;
+        BountyItemId =
+            sConfigMgr->GetOption<uint32>("KillStrike.Bounty.ItemId", 49426);
+        BountyCount =
+            sConfigMgr->GetOption<uint32>("KillStrike.Bounty.Count", 5);
+
+        NukeEnabled = sConfigMgr->GetOption<bool>("KillStrike.Nuke.Enable",
+            false);
+        NukeStreak =
+            sConfigMgr->GetOption<uint32>("KillStrike.Nuke.Streak", 50);
+        NukeRadius =
+            sConfigMgr->GetOption<float>("KillStrike.Nuke.Radius", 40.0f);
+        NukeVisualSpellId = sConfigMgr->GetOption<uint32>(
+            "KillStrike.Nuke.VisualSpellId", SPELL_KILLSTRIKE_NUKE_VISUAL);
     }
 };
 
@@ -152,6 +196,21 @@ struct KillStrikeData : public DataMap::Base
     uint32 Streak = 0;
     ObjectGuid LastVictim;
     ObjectGuid LastKiller;
+
+    // Time left until the bounty location is announced again
+    uint32 BountyTimer = 0;
+};
+
+// An item given for a streak or for a bounty, with the texts that go with it
+struct KillStrikeReward
+{
+    // Config option of ItemId, for the error log
+    char const* ItemOption;
+    uint32 ItemId;
+    uint32 Count;
+    KillStrikeString Earned;
+    KillStrikeString Subject;
+    KillStrikeString Body;
 };
 
 // Text of a module string in the player's locale. Empty when the row is
@@ -186,9 +245,11 @@ static void SendChatText(Player* player, KillStrikeString id, Args&&... args)
 }
 
 // Chat line plus the same text, with no prefix, in the middle of the screen
-static void SendScreenText(Player* player, KillStrikeString id)
+template<typename... Args>
+static void SendScreenText(Player* player, KillStrikeString id,
+    Args&&... args)
 {
-    std::string const text = GetText(player, id);
+    std::string const text = GetText(player, id, args...);
     if (text.empty())
         return;
 
@@ -202,6 +263,37 @@ static void AnnounceToServer(KillStrikeString id, Args&&... args)
     sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
     {
         SendChatText(player, id, args...);
+    });
+}
+
+// Zone the player is in, followed by the area inside it, in the reader's
+// locale
+static std::string GetLocationName(Player* player, Player* reader)
+{
+    LocaleConstant const locale = reader->GetSession()->GetSessionDbcLocale();
+    AreaTableEntry const* zone =
+        sAreaTableStore.LookupEntry(player->GetZoneId());
+    AreaTableEntry const* area =
+        sAreaTableStore.LookupEntry(player->GetAreaId());
+
+    if (!zone)
+        return area ? area->area_name[locale] : "";
+
+    if (!area || area == zone)
+        return zone->area_name[locale];
+
+    return Acore::StringFormat("{} ({})", zone->area_name[locale],
+        area->area_name[locale]);
+}
+
+// The location of the player is the last argument of the text
+template<typename... Args>
+static void AnnounceLocationToServer(KillStrikeString id, Player* where,
+    Args&&... args)
+{
+    sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
+    {
+        SendChatText(player, id, args..., GetLocationName(where, player));
     });
 }
 
@@ -243,13 +335,9 @@ static uint32 GetStreak(Player* player)
 
 // Sends the given amount of the reward item by mail, split in stacks and in
 // as many mails as needed
-static void MailStreakReward(Player* player, ItemTemplate const* proto,
-    uint32 count, uint32 streak)
+static void MailReward(Player* player, ItemTemplate const* proto,
+    uint32 count, std::string const& subject, std::string const& body)
 {
-    std::string const subject =
-        GetText(player, KILLSTRIKE_STRING_REWARD_SUBJECT);
-    std::string const body =
-        GetText(player, KILLSTRIKE_STRING_REWARD_BODY, streak);
     uint32 const maxStack = proto->GetMaxStackSize();
 
     CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
@@ -278,19 +366,22 @@ static void MailStreakReward(Player* player, ItemTemplate const* proto,
     CharacterDatabase.CommitTransaction(trans);
 }
 
-// Puts the reward in the bags and mails what does not fit
-static void GiveStreakReward(Player* player, uint32 streak)
+// Puts the reward in the bags and mails what does not fit. The arguments fill
+// both the Earned and the Body text.
+template<typename... Args>
+static void GiveReward(Player* player, KillStrikeReward const& reward,
+    Args&&... args)
 {
-    uint32 const itemId = killStrikeConfig.RewardItemId;
-    uint32 count = killStrikeConfig.RewardCount;
+    uint32 const itemId = reward.ItemId;
+    uint32 count = reward.Count;
     if (!itemId || !count)
         return;
 
     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
     if (!proto)
     {
-        LOG_ERROR("module", "KillStrike.Reward.ItemId: item {} does not "
-            "exist, no reward was given.", itemId);
+        LOG_ERROR("module", "{}: item {} does not exist, no reward was "
+            "given.", reward.ItemOption, itemId);
         return;
     }
 
@@ -301,8 +392,8 @@ static void GiveStreakReward(Player* player, uint32 streak)
         &overCapCount) != EQUIP_ERR_OK)
     {
         uint32 const notGiven = std::min(overCapCount, count);
-        LOG_WARN("module", "KillStrike.Reward.ItemId: player {} cannot carry "
-            "{} more of item {}, they were not given.",
+        LOG_WARN("module", "{}: player {} cannot carry {} more of item {}, "
+            "they were not given.", reward.ItemOption,
             player->GetGUID().ToString(), notGiven, itemId);
         count -= notGiven;
     }
@@ -310,7 +401,7 @@ static void GiveStreakReward(Player* player, uint32 streak)
     if (!count)
         return;
 
-    SendChatText(player, KILLSTRIKE_STRING_REWARD, streak);
+    SendChatText(player, reward.Earned, args...);
 
     uint32 noSpaceCount = 0;
     ItemPosCountVec dest;
@@ -333,7 +424,8 @@ static void GiveStreakReward(Player* player, uint32 streak)
     if (stored == count)
         return;
 
-    MailStreakReward(player, proto, count - stored, streak);
+    MailReward(player, proto, count - stored,
+        GetText(player, reward.Subject), GetText(player, reward.Body, args...));
     SendChatText(player, KILLSTRIKE_STRING_REWARD_MAILED);
 }
 
@@ -373,6 +465,91 @@ static bool AreEnemies(Player* killer, Player* killed)
     return killer->IsFFAPvP() && killed->IsFFAPvP();
 }
 
+// A death to another player always ends the streak, also when the kill is not
+// credited to the killer. Returns the streak that ended.
+static uint32 EndStreak(Player* killer, Player* killed)
+{
+    KillStrikeData* data =
+        killed->CustomData.GetDefault<KillStrikeData>(KILLSTRIKE_DATA_KEY);
+    uint32 const endedStreak = data->Streak;
+
+    data->Streak = 0;
+    data->LastVictim.Clear();
+    data->LastKiller = killer->GetGUID();
+    UpdateStreakAura(killed, 0);
+
+    if (killStrikeConfig.AnnounceStreakEnd && endedStreak
+        && endedStreak >= killStrikeConfig.StreakEndMinStreak)
+        AnnounceToServer(KILLSTRIKE_STRING_STREAK_ENDED_BY, killer->GetName(),
+            endedStreak, killed->GetName());
+
+    // The victim is told about any streak that reached the first milestone
+    if (endedStreak >= KillStrikeMilestones.front().Kills)
+        SendScreenText(killed, KILLSTRIKE_STRING_STREAK_ENDED);
+
+    return endedStreak;
+}
+
+static void AnnounceBounty(Player* player, KillStrikeData* data,
+    KillStrikeString id)
+{
+    data->BountyTimer = killStrikeConfig.BountyAnnounceInterval;
+    AnnounceLocationToServer(id, player, player->GetName(), data->Streak);
+}
+
+static void ClaimBounty(Player* hunter, Player* target)
+{
+    AnnounceToServer(KILLSTRIKE_STRING_BOUNTY_CLAIMED, hunter->GetName(),
+        target->GetName());
+
+    GiveReward(hunter, { "KillStrike.Bounty.ItemId",
+        killStrikeConfig.BountyItemId, killStrikeConfig.BountyCount,
+        KILLSTRIKE_STRING_BOUNTY_REWARD, KILLSTRIKE_STRING_BOUNTY_SUBJECT,
+        KILLSTRIKE_STRING_BOUNTY_BODY }, target->GetName());
+}
+
+// Kills every enemy near the player that the player could attack right now.
+// The victims lose their streaks, the player gets no kills and no honor.
+static void LaunchNuke(Player* player)
+{
+    if (!player->GetMap()->IsWorldMap())
+        return;
+
+    if (uint32 const visualSpellId = killStrikeConfig.NukeVisualSpellId)
+    {
+        if (sSpellMgr->GetSpellInfo(visualSpellId))
+            player->CastSpell(player, visualSpellId, true);
+        else
+            LOG_ERROR("module", "KillStrike.Nuke.VisualSpellId: spell {} does "
+                "not exist, the nuke had no visual.", visualSpellId);
+    }
+
+    float const radius = killStrikeConfig.NukeRadius;
+    std::list<Player*> targets;
+    Acore::AnyPlayerInObjectRangeCheck checker(player, radius, true, true);
+    Acore::PlayerListSearcher<Acore::AnyPlayerInObjectRangeCheck>
+        searcher(player, targets, checker);
+    Cell::VisitObjects(player, searcher, radius);
+
+    uint32 kills = 0;
+    for (Player* target : targets)
+    {
+        if (!AreEnemies(player, target) || !player->IsValidAttackTarget(target))
+            continue;
+
+        // Killed as a suicide, so nobody gets honor for it and the PvP kill
+        // hook sees killer == victim and skips it
+        Unit::Kill(target, target, false);
+        EndStreak(player, target);
+        SendScreenText(target, KILLSTRIKE_STRING_NUKED, player->GetName());
+        ++kills;
+    }
+
+    if (kills)
+        AnnounceLocationToServer(KILLSTRIKE_STRING_NUKE, player,
+            player->GetName(), kills);
+}
+
 static void HandlePvPKill(Player* killer, Player* killed)
 {
     if (!killStrikeConfig.Enabled || !AreEnemies(killer, killed))
@@ -387,28 +564,10 @@ static void HandlePvPKill(Player* killer, Player* killed)
 
     KillStrikeData* killerData =
         killer->CustomData.GetDefault<KillStrikeData>(KILLSTRIKE_DATA_KEY);
-    KillStrikeData* victimData =
-        killed->CustomData.GetDefault<KillStrikeData>(KILLSTRIKE_DATA_KEY);
 
     bool const credited = IsCreditedKill(killer, killed, killerData);
     bool const revenge = killerData->LastKiller == killed->GetGUID();
-    uint32 const endedStreak = victimData->Streak;
-
-    // A death to another player always ends the streak, also when the kill
-    // is not credited to the killer
-    victimData->Streak = 0;
-    victimData->LastVictim.Clear();
-    victimData->LastKiller = killer->GetGUID();
-    UpdateStreakAura(killed, 0);
-
-    if (killStrikeConfig.AnnounceStreakEnd && endedStreak
-        && endedStreak >= killStrikeConfig.StreakEndMinStreak)
-        AnnounceToServer(KILLSTRIKE_STRING_STREAK_ENDED_BY, killer->GetName(),
-            endedStreak, killed->GetName());
-
-    // The victim is told about any streak that reached the first milestone
-    if (endedStreak >= KillStrikeMilestones.front().Kills)
-        SendScreenText(killed, KILLSTRIKE_STRING_STREAK_ENDED);
+    uint32 const endedStreak = EndStreak(killer, killed);
 
     if (!credited)
         return;
@@ -420,30 +579,42 @@ static void HandlePvPKill(Player* killer, Player* killed)
         SendChatText(killed, KILLSTRIKE_STRING_REVENGED);
     }
 
-    ++killerData->Streak;
-    killerData->LastVictim = killed->GetGUID();
-    UpdateStreakAura(killer, killerData->Streak);
+    if (killStrikeConfig.BountyStreak
+        && endedStreak >= killStrikeConfig.BountyStreak)
+        ClaimBounty(killer, killed);
 
-    if (killerData->Streak == killStrikeConfig.RewardStreak)
-        GiveStreakReward(killer, killerData->Streak);
+    uint32 const streak = ++killerData->Streak;
+    killerData->LastVictim = killed->GetGUID();
+    UpdateStreakAura(killer, streak);
+
+    if (streak == killStrikeConfig.RewardStreak)
+        GiveReward(killer, { "KillStrike.Reward.ItemId",
+            killStrikeConfig.RewardItemId, killStrikeConfig.RewardCount,
+            KILLSTRIKE_STRING_REWARD, KILLSTRIKE_STRING_REWARD_SUBJECT,
+            KILLSTRIKE_STRING_REWARD_BODY }, streak);
 
     auto const milestone = std::find_if(KillStrikeMilestones.begin(),
         KillStrikeMilestones.end(), [&](KillStrikeMilestone const& entry)
     {
-        return entry.Kills == killerData->Streak;
+        return entry.Kills == streak;
     });
 
     if (milestone == KillStrikeMilestones.end())
-    {
         SendScreenText(killer, KILLSTRIKE_STRING_KILL);
-        return;
+    else
+    {
+        if (killStrikeConfig.AnnounceMilestones)
+            AnnounceToServer(milestone->Announce, killer->GetName(),
+                killed->GetName(), milestone->Kills);
+
+        SendScreenText(killer, KILLSTRIKE_STRING_ON_STREAK);
     }
 
-    if (killStrikeConfig.AnnounceMilestones)
-        AnnounceToServer(milestone->Announce, killer->GetName(),
-            killed->GetName(), milestone->Kills);
+    if (streak == killStrikeConfig.BountyStreak)
+        AnnounceBounty(killer, killerData, KILLSTRIKE_STRING_BOUNTY_PLACED);
 
-    SendScreenText(killer, KILLSTRIKE_STRING_ON_STREAK);
+    if (killStrikeConfig.NukeEnabled && streak == killStrikeConfig.NukeStreak)
+        LaunchNuke(killer);
 }
 
 // The player a killing blow counts for. A pet, guardian or totem kills for its
@@ -466,7 +637,8 @@ public:
         PLAYERHOOK_ON_PLAYER_KILLED_BY_CREATURE,
         PLAYERHOOK_ON_BEFORE_LOGOUT,
         PLAYERHOOK_ON_PLAYER_RESURRECT,
-        PLAYERHOOK_ON_MAP_CHANGED
+        PLAYERHOOK_ON_MAP_CHANGED,
+        PLAYERHOOK_ON_UPDATE
     }) { }
 
     void OnPlayerPVPKill(Player* killer, Player* killed) override
@@ -503,6 +675,28 @@ public:
     void OnPlayerMapChanged(Player* player) override
     {
         UpdateStreakAura(player, GetStreak(player));
+    }
+
+    // Repeats the bounty location while the player keeps the streak
+    void OnPlayerUpdate(Player* player, uint32 diff) override
+    {
+        uint32 const bountyStreak = killStrikeConfig.BountyStreak;
+        if (!killStrikeConfig.Enabled || !bountyStreak
+            || !killStrikeConfig.BountyAnnounceInterval)
+            return;
+
+        KillStrikeData* data =
+            player->CustomData.Get<KillStrikeData>(KILLSTRIKE_DATA_KEY);
+        if (!data || data->Streak < bountyStreak)
+            return;
+
+        if (data->BountyTimer > diff)
+        {
+            data->BountyTimer -= diff;
+            return;
+        }
+
+        AnnounceBounty(player, data, KILLSTRIKE_STRING_BOUNTY_REMINDER);
     }
 };
 
