@@ -19,6 +19,17 @@ ends the streak.
   in the bags is sent to the mailbox. Copies the player cannot carry, such as
   a second copy of a unique item, are not given; copies still waiting in the
   mailbox are not counted.
+- At 50 kills a bounty is placed on the player: the whole server is told the
+  zone and area they are in, and again every 2 minutes until the streak ends.
+  Whoever kills them gets the bounty reward, by default 5 Emblems of Frost,
+  if the kill passes the anti-farm checks below. The streak, the interval and
+  the reward are set in the config (`KillStrike.Bounty.*`).
+- Optional, off by default: at 50 kills the player launches a tactical nuke
+  (`KillStrike.Nuke.*`). Every enemy player within 40 yards that the player
+  could attack at that moment (PvP on, not in a sanctuary) dies at once. It
+  only works in the open world, never in a dungeon, raid, battleground or
+  arena. The victims lose their streaks, but the player gets no kills and no
+  honor for them.
 - Killing the player who killed you last shows a "revenge" message to both.
 - Only kills between enemies count: players of different factions (or of
   different teams inside a battleground or arena), and players of the same
@@ -56,9 +67,9 @@ The victim's own streak still ends in these cases.
 
 All texts are in the world database table `module_string`, under the module
 name `mod-killstrike`. Edit a row to change a text, or empty it to turn that
-message off, then run `.reload module_string`. Rows 14 and 15 cannot be turned
-off: a reward that does not fit in the bags is still mailed, with a blank
-subject or body when its row is empty. Translations go in
+message off, then run `.reload module_string`. Rows 14, 15, 21 and 22 cannot be
+turned off: a reward that does not fit in the bags is still mailed, with a
+blank subject or body when its row is empty. Translations go in
 `module_string_locale`.
 
 | id   | Message                                             |
@@ -76,3 +87,11 @@ subject or body when its row is empty. Translations go in
 | 14   | Mail subject of a mailed reward                     |
 | 15   | Mail body of a mailed reward (streak)               |
 | 16   | Prefix put before every chat line of this module    |
+| 17   | Server: bounty placed (player, streak, location)    |
+| 18   | Server: bounty reminder (player, streak, location)  |
+| 19   | Server: bounty claimed (hunter, player)             |
+| 20   | Hunter: earned the bounty reward (player)           |
+| 21   | Mail subject of a mailed bounty reward              |
+| 22   | Mail body of a mailed bounty reward (player)        |
+| 23   | Server: tactical nuke (player, kills, location)     |
+| 24   | Victim: killed by a tactical nuke (player)          |

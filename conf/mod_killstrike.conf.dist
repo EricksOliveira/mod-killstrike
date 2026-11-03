@@ -169,3 +169,94 @@ KillStrike.Reward.ItemId = 49426
 #
 
 KillStrike.Reward.Count = 1
+
+########################################
+# BOUNTY
+########################################
+#
+#    KillStrike.Bounty.Streak
+#        Description: Streak at which the whole server is told where the
+#                     player is, so everyone can hunt them. Whoever then kills
+#                     that player gets the bounty reward. The kill must pass
+#                     the anti-farm checks above.
+#        Default:     50
+#                     0  - (No bounty)
+#
+
+KillStrike.Bounty.Streak = 50
+
+#
+#    KillStrike.Bounty.AnnounceInterval
+#        Description: Seconds between two announcements of where the player
+#                     with the bounty is, until the streak ends or the player
+#                     logs out.
+#        Default:     120
+#                     0   - (Announced only once)
+#
+
+KillStrike.Bounty.AnnounceInterval = 120
+
+#
+#    KillStrike.Bounty.ItemId
+#        Description: Item given to whoever kills the player with the bounty.
+#                     What does not fit in the bags is sent to the mailbox,
+#                     as for KillStrike.Reward.ItemId.
+#        Default:     49426 - (Emblem of Frost)
+#                     0     - (No reward)
+#
+
+KillStrike.Bounty.ItemId = 49426
+
+#
+#    KillStrike.Bounty.Count
+#        Description: How many of KillStrike.Bounty.ItemId are given.
+#        Default:     5
+#                     0 - (No reward)
+#
+
+KillStrike.Bounty.Count = 5
+
+########################################
+# TACTICAL NUKE
+########################################
+#
+#    KillStrike.Nuke.Enable
+#        Description: When a player reaches KillStrike.Nuke.Streak, kills every
+#                     enemy player within KillStrike.Nuke.Radius that the
+#                     player could attack at that moment (PvP on, not in a
+#                     sanctuary). Only in the open world, never in a dungeon,
+#                     raid, battleground or arena. The victims lose their
+#                     streaks, but the player gets no kills and no honor for
+#                     them.
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+
+KillStrike.Nuke.Enable = 0
+
+#
+#    KillStrike.Nuke.Streak
+#        Description: Streak that launches the nuke.
+#        Default:     50
+#
+
+KillStrike.Nuke.Streak = 50
+
+#
+#    KillStrike.Nuke.Radius
+#        Description: Distance, in yards, from the player within which enemies
+#                     are killed.
+#        Default:     40
+#
+
+KillStrike.Nuke.Radius = 40
+
+#
+#    KillStrike.Nuke.VisualSpellId
+#        Description: Spell cast on the player as the visual of the
+#                     nuke. Use a spell with no gameplay effect.
+#        Default:     46225 - (Cosmetic - Huge Explosion)
+#                     0     - (No visual)
+#
+
+KillStrike.Nuke.VisualSpellId = 46225
